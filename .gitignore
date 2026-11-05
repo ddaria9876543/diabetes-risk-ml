@@ -9,3 +9,5 @@ results/
 .vscode/
 .idea/
 .DS_Store
+mlruns/
+mlflow.db

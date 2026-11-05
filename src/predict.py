@@ -5,54 +5,77 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
+from src.train import create_features, replace_invalid_zeros
 
-DEFAULT_MODEL_PATH = Path("models/lightgbm_diabetes.joblib")
-DEFAULT_SCALER_PATH = Path("models/scaler.joblib")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+MODEL_PATH = PROJECT_ROOT / "models/lightgbm_diabetes.joblib"
+SCALER_PATH = PROJECT_ROOT / "models/scaler.joblib"
+IMPUTER_PATH = PROJECT_ROOT / "models/imputer.joblib"
+
+FEATURE_COLUMNS = [
+    "Pregnancies",
+    "Glucose",
+    "BloodPressure",
+    "SkinThickness",
+    "Insulin",
+    "BMI",
+    "DiabetesPedigreeFunction",
+    "Age",
+]
 
 
-def create_features(data: dict) -> pd.DataFrame:
-    row = {
-        "Pregnancies": data["Pregnancies"],
-        "Glucose": data["Glucose"],
-        "BloodPressure": data["BloodPressure"],
-        "SkinThickness": data["SkinThickness"],
-        "Insulin": data["Insulin"],
-        "BMI": data["BMI"],
-        "DiabetesPedigreeFunction": data["DiabetesPedigreeFunction"],
-        "Age": data["Age"],
+def predict_patient(patient: dict) -> dict:
+    """Получает прогноз для одного пациента."""
+    required_files = [
+        MODEL_PATH,
+        SCALER_PATH,
+        IMPUTER_PATH,
+    ]
+
+    for file_path in required_files:
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"Не найден файл модели или предобработки: {file_path}"
+            )
+
+    missing_columns = [column for column in FEATURE_COLUMNS if column not in patient]
+
+    if missing_columns:
+        raise ValueError(f"Отсутствуют признаки: {missing_columns}")
+
+    model = joblib.load(MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+    imputer = joblib.load(IMPUTER_PATH)
+
+    features = pd.DataFrame(
+        [patient],
+        columns=FEATURE_COLUMNS,
+    )
+
+    features = replace_invalid_zeros(features)
+
+    features = pd.DataFrame(
+        imputer.transform(features),
+        columns=FEATURE_COLUMNS,
+    )
+
+    features = create_features(features)
+
+    features_scaled = scaler.transform(features)
+
+    prediction = int(model.predict(features_scaled)[0])
+    probability = float(model.predict_proba(features_scaled)[0][1])
+
+    return {
+        "prediction": prediction,
+        "risk": "Диабет" if prediction == 1 else "Нет диабета",
+        "probability": round(probability, 4),
     }
-
-    row["Insulin_BMI"] = (
-        row["Insulin"] * row["BMI"]
-    )
-
-    row["Glucose_BMI"] = (
-        row["Glucose"] * row["BMI"]
-    )
-
-    row["Glucose_Age"] = (
-        row["Glucose"] * row["Age"]
-    )
-
-    row["BMI_Age"] = (
-        row["BMI"] * row["Age"]
-    )
-
-    row["Insulin_Glucose"] = (
-        row["Insulin"] * row["Glucose"]
-    )
-
-    row["Pregnancies_Age"] = (
-        row["Pregnancies"] * row["Age"]
-    )
-
-    return pd.DataFrame([row])
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Diabetes risk prediction"
-    )
+    parser = argparse.ArgumentParser(description="Diabetes risk prediction")
 
     parser.add_argument(
         "--input",
@@ -72,70 +95,21 @@ def main() -> None:
     output_dir = Path(args.output)
 
     if not input_path.exists():
-        raise FileNotFoundError(
-            f"Входной файл не найден: {input_path}"
-        )
+        raise FileNotFoundError(f"Входной файл не найден: {input_path}")
 
-    with open(
-        input_path,
-        "r",
-        encoding="utf-8",
-    ) as file:
+    with input_path.open(encoding="utf-8") as file:
         patient = json.load(file)
 
-    model = joblib.load(
-        DEFAULT_MODEL_PATH
-    )
-
-    scaler = joblib.load(
-        DEFAULT_SCALER_PATH
-    )
-
-    features = create_features(
-        patient
-    )
-
-    features_scaled = scaler.transform(
-        features
-    )
-
-    prediction = int(
-        model.predict(
-            features_scaled
-        )[0]
-    )
-
-    probability = float(
-        model.predict_proba(
-            features_scaled
-        )[0][1]
-    )
-
-    result = {
-        "prediction": prediction,
-        "risk": (
-            "Диабет"
-            if prediction == 1
-            else "Нет диабета"
-        ),
-        "probability": round(
-            probability,
-            4,
-        ),
-    }
+    result = predict_patient(patient)
 
     output_dir.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    output_path = (
-        output_dir
-        / "prediction.json"
-    )
+    output_path = output_dir / "prediction.json"
 
-    with open(
-        output_path,
+    with output_path.open(
         "w",
         encoding="utf-8",
     ) as file:
@@ -147,18 +121,8 @@ def main() -> None:
         )
 
     print("Результат прогнозирования:")
-    print(
-        json.dumps(
-            result,
-            ensure_ascii=False,
-            indent=4,
-        )
-    )
-
-    print()
-    print(
-        f"Результат сохранён: {output_path}"
-    )
+    print(json.dumps(result, ensure_ascii=False, indent=4))
+    print(f"Результат сохранён: {output_path}")
 
 
 if __name__ == "__main__":
