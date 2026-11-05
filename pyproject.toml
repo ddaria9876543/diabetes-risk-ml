@@ -11,3 +11,8 @@ dependencies = [
     "lightgbm",
     "joblib"
 ]
+
+[dependency-groups]
+dev = [
+    "dvc>=3.67.1",
+]
