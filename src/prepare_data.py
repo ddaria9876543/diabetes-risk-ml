@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 import numpy as np
@@ -37,34 +38,12 @@ def main() -> None:
         .replace(0, np.nan)
     )
 
-    # Медианная импутация отдельно для каждого класса
+    # Медианная импутация без использования целевой переменной
     for col in cols_with_zeros:
-        median_0 = (
-            df_processed[
-                df_processed["Outcome"] == 0
-            ][col]
-            .median()
+        median_value = df_processed[col].median()
+        df_processed[col] = df_processed[col].fillna(
+            median_value
         )
-
-        median_1 = (
-            df_processed[
-                df_processed["Outcome"] == 1
-            ][col]
-            .median()
-        )
-
-        mask_0 = (
-            (df_processed["Outcome"] == 0)
-            & df_processed[col].isna()
-        )
-
-        mask_1 = (
-            (df_processed["Outcome"] == 1)
-            & df_processed[col].isna()
-        )
-
-        df_processed.loc[mask_0, col] = median_0
-        df_processed.loc[mask_1, col] = median_1
 
     # Feature Engineering из курсовой
     df_processed["Insulin_BMI"] = (
