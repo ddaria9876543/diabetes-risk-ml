@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+export PATH="$HOME/.local/bin:$PATH"
 
 INPUT="data/sample_patient.json"
 OUTPUT="results"
@@ -22,6 +23,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-uv run python src/predict.py \
+uv run python -m src.predict \
   --input "$INPUT" \
   --output "$OUTPUT"
